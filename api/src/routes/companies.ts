@@ -3,8 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { companies } from "../db/schema.js";
-import { parseId, pgErrorCode } from "../http.js";
-
+import { parseId, pgErrorCode, PG_FOREIGN_KEY_VIOLATION, PG_RESTRICT_VIOLATION } from "../http.js";
 const companyInput = z.object({
   name: z.string().trim().min(1).max(200),
   website: z.url().max(500).nullish(),
@@ -91,8 +90,9 @@ companiesRouter.delete("/:id", async (req, res) => {
     }
 
     res.status(204).end();
-  } catch (err) {
-    if (pgErrorCode(err) === "23503") {
+    } catch (err) {
+    const code = pgErrorCode(err);
+    if (code === PG_RESTRICT_VIOLATION || code === PG_FOREIGN_KEY_VIOLATION) {
       res.status(409).json({ error: "Company has applications; delete or move them first" });
       return;
     }

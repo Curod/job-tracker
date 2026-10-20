@@ -1,3 +1,6 @@
+export const PG_FOREIGN_KEY_VIOLATION = "23503";
+export const PG_RESTRICT_VIOLATION = "23001";
+
 export function parseId(value: string): number | null {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
