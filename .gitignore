@@ -1,0 +1,15 @@
+# Dependencies (reinstalled from package.json)
+node_modules/
+
+# Build output (generated from source)
+dist/
+
+# private env keys.
+.env
+
+# Python
+__pycache__/
+.venv/
+
+# Logs
+*.log
