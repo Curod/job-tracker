@@ -1,9 +1,10 @@
-import express, { type NextFunction, type Request, type Response } from "express";
+import express from "express";
 import { pool } from "./db/client.js";
 import { companiesRouter } from "./routes/companies.js";
 import { applicationsRouter } from "./routes/applications.js";
 import { contactsRouter } from "./routes/contacts.js";
 import { notesRouter } from "./routes/notes.js";
+import { errorHandler, notFoundHandler } from "./errors.js";
 
 export const app = express();
 
@@ -24,15 +25,5 @@ app.use("/applications", applicationsRouter);
 app.use(contactsRouter);
 app.use(notesRouter);
 
-app.use((_req, res) => {
-    res.status(404).json({ error: "Not found" });
-});
-
-app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  if ((err as { type?: string })?.type === "entity.parse.failed") {
-    res.status(400).json({ error: "Malformed JSON body" });
-    return;
-  }
-  console.error(err);
-  res.status(500).json({ error: "Internal server error" });
-});
+app.use(notFoundHandler);
+app.use(errorHandler);

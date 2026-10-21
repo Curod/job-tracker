@@ -3,7 +3,8 @@ import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { companies, contacts } from "../db/schema.js";
-import { parseId, pgErrorCode, PG_FOREIGN_KEY_VIOLATION } from "../http.js";
+import { HttpError } from "../errors.js";
+import { pgErrorCode, PG_FOREIGN_KEY_VIOLATION, requireId } from "../http.js";
 
 const contactInput = z.object({
   name: z.string().trim().min(1).max(200),
@@ -16,21 +17,14 @@ const contactInput = z.object({
 export const contactsRouter = Router();
 
 contactsRouter.get("/companies/:companyId/contacts", async (req, res) => {
-  const companyId = parseId(req.params.companyId);
-  if (companyId === null) {
-    res.status(400).json({ error: "Invalid company id" });
-    return;
-  }
+  const companyId = requireId(req.params.companyId);
 
   const [company] = await db
     .select({ id: companies.id })
     .from(companies)
     .where(eq(companies.id, companyId));
 
-  if (!company) {
-    res.status(404).json({ error: "Company not found" });
-    return;
-  }
+  if (!company) throw new HttpError(404, "Company not found");
 
   const rows = await db
     .select()
@@ -42,76 +36,45 @@ contactsRouter.get("/companies/:companyId/contacts", async (req, res) => {
 });
 
 contactsRouter.post("/companies/:companyId/contacts", async (req, res) => {
-  const companyId = parseId(req.params.companyId);
-  if (companyId === null) {
-    res.status(400).json({ error: "Invalid company id" });
-    return;
-  }
-
-  const parsed = contactInput.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
-    return;
-  }
+  const companyId = requireId(req.params.companyId);
+  const data = contactInput.parse(req.body);
 
   try {
     const [created] = await db
       .insert(contacts)
-      .values({ ...parsed.data, companyId })
+      .values({ ...data, companyId })
       .returning();
     res.status(201).json(created);
   } catch (err) {
     if (pgErrorCode(err) === PG_FOREIGN_KEY_VIOLATION) {
-      res.status(404).json({ error: "Company not found" });
-      return;
+      throw new HttpError(404, "Company not found");
     }
     throw err;
   }
 });
 
 contactsRouter.patch("/contacts/:id", async (req, res) => {
-  const id = parseId(req.params.id);
-  if (id === null) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
-
-  const parsed = contactInput.partial().safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
-    return;
-  }
+  const id = requireId(req.params.id);
+  const data = contactInput.partial().parse(req.body);
 
   const [updated] = await db
     .update(contacts)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({ ...data, updatedAt: new Date() })
     .where(eq(contacts.id, id))
     .returning();
 
-  if (!updated) {
-    res.status(404).json({ error: "Contact not found" });
-    return;
-  }
-
+  if (!updated) throw new HttpError(404, "Contact not found");
   res.json(updated);
 });
 
 contactsRouter.delete("/contacts/:id", async (req, res) => {
-  const id = parseId(req.params.id);
-  if (id === null) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+  const id = requireId(req.params.id);
 
   const [deleted] = await db
     .delete(contacts)
     .where(eq(contacts.id, id))
     .returning({ id: contacts.id });
 
-  if (!deleted) {
-    res.status(404).json({ error: "Contact not found" });
-    return;
-  }
-
+  if (!deleted) throw new HttpError(404, "Contact not found");
   res.status(204).end();
 });

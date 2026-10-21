@@ -3,7 +3,8 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { applications, notes } from "../db/schema.js";
-import { parseId, pgErrorCode, PG_FOREIGN_KEY_VIOLATION } from "../http.js";
+import { HttpError } from "../errors.js";
+import { pgErrorCode, PG_FOREIGN_KEY_VIOLATION, requireId } from "../http.js";
 
 const noteInput = z.object({
   body: z.string().trim().min(1).max(10000),
@@ -12,21 +13,14 @@ const noteInput = z.object({
 export const notesRouter = Router();
 
 notesRouter.get("/applications/:applicationId/notes", async (req, res) => {
-  const applicationId = parseId(req.params.applicationId);
-  if (applicationId === null) {
-    res.status(400).json({ error: "Invalid application id" });
-    return;
-  }
+  const applicationId = requireId(req.params.applicationId);
 
   const [application] = await db
     .select({ id: applications.id })
     .from(applications)
     .where(eq(applications.id, applicationId));
 
-  if (!application) {
-    res.status(404).json({ error: "Application not found" });
-    return;
-  }
+  if (!application) throw new HttpError(404, "Application not found");
 
   const rows = await db
     .select()
@@ -38,49 +32,31 @@ notesRouter.get("/applications/:applicationId/notes", async (req, res) => {
 });
 
 notesRouter.post("/applications/:applicationId/notes", async (req, res) => {
-  const applicationId = parseId(req.params.applicationId);
-  if (applicationId === null) {
-    res.status(400).json({ error: "Invalid application id" });
-    return;
-  }
-
-  const parsed = noteInput.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
-    return;
-  }
+  const applicationId = requireId(req.params.applicationId);
+  const data = noteInput.parse(req.body);
 
   try {
     const [created] = await db
       .insert(notes)
-      .values({ ...parsed.data, applicationId })
+      .values({ ...data, applicationId })
       .returning();
     res.status(201).json(created);
   } catch (err) {
     if (pgErrorCode(err) === PG_FOREIGN_KEY_VIOLATION) {
-      res.status(404).json({ error: "Application not found" });
-      return;
+      throw new HttpError(404, "Application not found");
     }
     throw err;
   }
 });
 
 notesRouter.delete("/notes/:id", async (req, res) => {
-  const id = parseId(req.params.id);
-  if (id === null) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+  const id = requireId(req.params.id);
 
   const [deleted] = await db
     .delete(notes)
     .where(eq(notes.id, id))
     .returning({ id: notes.id });
 
-  if (!deleted) {
-    res.status(404).json({ error: "Note not found" });
-    return;
-  }
-
+  if (!deleted) throw new HttpError(404, "Note not found");
   res.status(204).end();
 });

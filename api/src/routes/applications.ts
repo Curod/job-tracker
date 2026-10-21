@@ -4,7 +4,8 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { applicationStatus, applications, companies } from "../db/schema.js";
 import { canTransition } from "../domain/status.js";
-import { parseId, pgErrorCode } from "../http.js";
+import { HttpError } from "../errors.js";
+import { pgErrorCode, PG_FOREIGN_KEY_VIOLATION, requireId } from "../http.js";
 
 const statusSchema = z.enum(applicationStatus.enumValues);
 
@@ -21,15 +22,12 @@ const listQuery = z.object({
   companyId: z.coerce.number().int().positive().optional(),
 });
 
+const statusInput = z.object({ status: statusSchema });
+
 export const applicationsRouter = Router();
 
 applicationsRouter.get("/", async (req, res) => {
-  const parsed = listQuery.safeParse(req.query);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid query", issues: parsed.error.issues });
-    return;
-  }
-  const { status, companyId } = parsed.data;
+  const { status, companyId } = listQuery.parse(req.query);
 
   const conditions = [];
   if (status) conditions.push(eq(applications.status, status));
@@ -46,11 +44,7 @@ applicationsRouter.get("/", async (req, res) => {
 });
 
 applicationsRouter.get("/:id", async (req, res) => {
-  const id = parseId(req.params.id);
-  if (id === null) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+  const id = requireId(req.params.id);
 
   const [row] = await db
     .select({ application: applications, companyName: companies.name })
@@ -58,95 +52,58 @@ applicationsRouter.get("/:id", async (req, res) => {
     .innerJoin(companies, eq(applications.companyId, companies.id))
     .where(eq(applications.id, id));
 
-  if (!row) {
-    res.status(404).json({ error: "Application not found" });
-    return;
-  }
-
+  if (!row) throw new HttpError(404, "Application not found");
   res.json({ ...row.application, companyName: row.companyName });
 });
 
 applicationsRouter.post("/", async (req, res) => {
-  const parsed = applicationInput.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
-    return;
-  }
+  const data = applicationInput.parse(req.body);
 
   try {
-    const [created] = await db.insert(applications).values(parsed.data).returning();
+    const [created] = await db.insert(applications).values(data).returning();
     res.status(201).json(created);
   } catch (err) {
-    if (pgErrorCode(err) === "23503") {
-      res.status(400).json({ error: "companyId does not refer to an existing company" });
-      return;
+    if (pgErrorCode(err) === PG_FOREIGN_KEY_VIOLATION) {
+      throw new HttpError(400, "companyId does not refer to an existing company");
     }
     throw err;
   }
 });
 
 applicationsRouter.patch("/:id", async (req, res) => {
-  const id = parseId(req.params.id);
-  if (id === null) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
-
-  const parsed = applicationInput.partial().safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
-    return;
-  }
+  const id = requireId(req.params.id);
+  const data = applicationInput.partial().parse(req.body);
 
   try {
     const [updated] = await db
       .update(applications)
-      .set({ ...parsed.data, updatedAt: new Date() })
+      .set({ ...data, updatedAt: new Date() })
       .where(eq(applications.id, id))
       .returning();
 
-    if (!updated) {
-      res.status(404).json({ error: "Application not found" });
-      return;
-    }
-
+    if (!updated) throw new HttpError(404, "Application not found");
     res.json(updated);
   } catch (err) {
-    if (pgErrorCode(err) === "23503") {
-      res.status(400).json({ error: "companyId does not refer to an existing company" });
-      return;
+    if (pgErrorCode(err) === PG_FOREIGN_KEY_VIOLATION) {
+      throw new HttpError(400, "companyId does not refer to an existing company");
     }
     throw err;
   }
 });
 
 applicationsRouter.patch("/:id/status", async (req, res) => {
-  const id = parseId(req.params.id);
-  if (id === null) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
-
-  const parsed = z.object({ status: statusSchema }).safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
-    return;
-  }
-  const to = parsed.data.status;
+  const id = requireId(req.params.id);
+  const { status: to } = statusInput.parse(req.body);
 
   const [current] = await db
     .select({ status: applications.status })
     .from(applications)
     .where(eq(applications.id, id));
 
-  if (!current) {
-    res.status(404).json({ error: "Application not found" });
-    return;
-  }
+  if (!current) throw new HttpError(404, "Application not found");
 
   if (!canTransition(current.status, to)) {
-    res.status(409).json({ error: `Cannot move from '${current.status}' to '${to}'` });
-    return;
+    throw new HttpError(409, `Cannot move from '${current.status}' to '${to}'`);
   }
 
   const [updated] = await db
@@ -156,29 +113,20 @@ applicationsRouter.patch("/:id/status", async (req, res) => {
     .returning();
 
   if (!updated) {
-    res.status(409).json({ error: "Status changed by another request; reload and try again" });
-    return;
+    throw new HttpError(409, "Status changed by another request; reload and try again");
   }
 
   res.json(updated);
 });
 
 applicationsRouter.delete("/:id", async (req, res) => {
-  const id = parseId(req.params.id);
-  if (id === null) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+  const id = requireId(req.params.id);
 
   const [deleted] = await db
     .delete(applications)
     .where(eq(applications.id, id))
     .returning({ id: applications.id });
 
-  if (!deleted) {
-    res.status(404).json({ error: "Application not found" });
-    return;
-  }
-
+  if (!deleted) throw new HttpError(404, "Application not found");
   res.status(204).end();
 });
