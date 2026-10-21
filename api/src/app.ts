@@ -2,6 +2,8 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { pool } from "./db/client.js";
 import { companiesRouter } from "./routes/companies.js";
 import { applicationsRouter } from "./routes/applications.js";
+import { contactsRouter } from "./routes/contacts.js";
+import { notesRouter } from "./routes/notes.js";
 
 export const app = express();
 
@@ -19,9 +21,11 @@ app.get("/health", async (_req, res) => {
 
 app.use("/companies", companiesRouter);
 app.use("/applications", applicationsRouter);
+app.use(contactsRouter);
+app.use(notesRouter);
 
 app.use((_req, res) => {
-  res.status(404).json({ error: "Not found" });
+    res.status(404).json({ error: "Not found" });
 });
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
