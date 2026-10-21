@@ -5,6 +5,8 @@ import { applicationsRouter } from "./routes/applications.js";
 import { contactsRouter } from "./routes/contacts.js";
 import { notesRouter } from "./routes/notes.js";
 import { errorHandler, notFoundHandler } from "./errors.js";
+import { authRouter } from "./routes/auth.js";
+
 
 export const app = express();
 
@@ -24,6 +26,7 @@ app.use("/companies", companiesRouter);
 app.use("/applications", applicationsRouter);
 app.use(contactsRouter);
 app.use(notesRouter);
+app.use(authRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -76,3 +76,10 @@ export const notes = pgTable(
   },
   (table) => [index("notes_application_id_created_at_idx").on(table.applicationId, table.createdAt)],
 );
+
+export const users = pgTable("users", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
