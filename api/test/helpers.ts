@@ -5,6 +5,6 @@ export async function resetDb() {
     throw new Error("resetDb refused: not connected to a _test database");
   }
   await pool.query(
-    "TRUNCATE notes, contacts, applications, companies, users RESTART IDENTITY CASCADE",
+    "TRUNCATE sessions, notes, contacts, applications, companies, users RESTART IDENTITY CASCADE",
   );
 }
