@@ -1,21 +1,22 @@
 import express from "express";
+import cookieParser from "cookie-parser";
+import { requireAuth } from "./auth/middleware.js";
 import { pool } from "./db/client.js";
-import { companiesRouter } from "./routes/companies.js";
+import { errorHandler, notFoundHandler } from "./errors.js";
 import { applicationsRouter } from "./routes/applications.js";
+import { authRouter } from "./routes/auth.js";
+import { companiesRouter } from "./routes/companies.js";
 import { contactsRouter } from "./routes/contacts.js";
 import { notesRouter } from "./routes/notes.js";
-import { errorHandler, notFoundHandler } from "./errors.js";
-import { authRouter } from "./routes/auth.js";
-import cookieParser from "cookie-parser";
-
 
 export const app = express();
+
+app.disable("x-powered-by");
 
 app.use(express.json());
 app.use(cookieParser());
 
-app.use(express.json());
-
+// Public routes
 app.get("/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
@@ -27,6 +28,10 @@ app.get("/health", async (_req, res) => {
 });
 
 app.use(authRouter);
+
+// Everything below this line requires a logged-in user
+app.use(requireAuth);
+
 app.use("/companies", companiesRouter);
 app.use("/applications", applicationsRouter);
 app.use(contactsRouter);

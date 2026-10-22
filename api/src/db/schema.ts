@@ -17,14 +17,21 @@ export const applicationStatus = pgEnum("application_status", [
   "rejected",
 ]);
 
-export const companies = pgTable("companies", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  name: varchar("name", { length: 200 }).notNull(),
-  website: varchar("website", { length: 500 }),
-  notes: text("notes"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const companies = pgTable(
+  "companies",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 200 }).notNull(),
+    website: varchar("website", { length: 500 }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("companies_user_id_idx").on(table.userId)],
+);
 
 export const applications = pgTable(
   "applications",

@@ -1,15 +1,18 @@
-import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { app } from "../src/app.js";
 import { pool } from "../src/db/client.js";
-import { resetDb } from "./helpers.js";
+import { resetDb, signedInAgent, type TestAgent } from "./helpers.js";
 
-beforeEach(resetDb);
+let agent: TestAgent;
+
+beforeEach(async () => {
+  await resetDb();
+  agent = await signedInAgent();
+});
 afterAll(() => pool.end());
 
 async function createApplication() {
-  const company = await request(app).post("/companies").send({ name: "Monday.com" });
-  const application = await request(app)
+  const company = await agent.post("/companies").send({ name: "Monday.com" });
+  const application = await agent
     .post("/applications")
     .send({ companyId: company.body.id, roleTitle: "Backend Developer" });
   return application.body;
@@ -18,7 +21,7 @@ async function createApplication() {
 describe("notes API", () => {
   it("adds a note to an application", async () => {
     const application = await createApplication();
-    const res = await request(app)
+    const res = await agent
       .post(`/applications/${application.id}/notes`)
       .send({ body: "Phone screen went well" });
 
@@ -28,31 +31,31 @@ describe("notes API", () => {
 
   it("rejects an empty note", async () => {
     const application = await createApplication();
-    const res = await request(app)
+    const res = await agent
       .post(`/applications/${application.id}/notes`)
       .send({ body: "   " });
     expect(res.status).toBe(400);
   });
 
   it("returns 404 for a missing application", async () => {
-    const res = await request(app).post("/applications/999/notes").send({ body: "Hello" });
+    const res = await agent.post("/applications/999/notes").send({ body: "Hello" });
     expect(res.status).toBe(404);
   });
 
   it("lists notes newest first", async () => {
     const application = await createApplication();
-    await request(app).post(`/applications/${application.id}/notes`).send({ body: "First" });
-    await request(app).post(`/applications/${application.id}/notes`).send({ body: "Second" });
+    await agent.post(`/applications/${application.id}/notes`).send({ body: "First" });
+    await agent.post(`/applications/${application.id}/notes`).send({ body: "Second" });
 
-    const res = await request(app).get(`/applications/${application.id}/notes`);
+    const res = await agent.get(`/applications/${application.id}/notes`);
     expect(res.body.map((n: { body: string }) => n.body)).toEqual(["Second", "First"]);
   });
 
   it("deletes notes together with their application", async () => {
     const application = await createApplication();
-    await request(app).post(`/applications/${application.id}/notes`).send({ body: "First" });
+    await agent.post(`/applications/${application.id}/notes`).send({ body: "First" });
 
-    const res = await request(app).delete(`/applications/${application.id}`);
+    const res = await agent.delete(`/applications/${application.id}`);
     expect(res.status).toBe(204);
 
     const { rows } = await pool.query("SELECT count(*)::int AS count FROM notes");

@@ -1,8 +1,10 @@
 import { Router } from "express";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { currentUser } from "../auth/middleware.js";
+import { findOwnedCompany, ownedCompanyIds } from "../auth/ownership.js";
 import { db } from "../db/client.js";
-import { companies, contacts } from "../db/schema.js";
+import { contacts } from "../db/schema.js";
 import { HttpError } from "../errors.js";
 import { pgErrorCode, PG_FOREIGN_KEY_VIOLATION, requireId } from "../http.js";
 
@@ -17,14 +19,12 @@ const contactInput = z.object({
 export const contactsRouter = Router();
 
 contactsRouter.get("/companies/:companyId/contacts", async (req, res) => {
+  const user = currentUser(req);
   const companyId = requireId(req.params.companyId);
 
-  const [company] = await db
-    .select({ id: companies.id })
-    .from(companies)
-    .where(eq(companies.id, companyId));
-
-  if (!company) throw new HttpError(404, "Company not found");
+  if (!(await findOwnedCompany(user.id, companyId))) {
+    throw new HttpError(404, "Company not found");
+  }
 
   const rows = await db
     .select()
@@ -36,8 +36,13 @@ contactsRouter.get("/companies/:companyId/contacts", async (req, res) => {
 });
 
 contactsRouter.post("/companies/:companyId/contacts", async (req, res) => {
+  const user = currentUser(req);
   const companyId = requireId(req.params.companyId);
   const data = contactInput.parse(req.body);
+
+  if (!(await findOwnedCompany(user.id, companyId))) {
+    throw new HttpError(404, "Company not found");
+  }
 
   try {
     const [created] = await db
@@ -46,21 +51,20 @@ contactsRouter.post("/companies/:companyId/contacts", async (req, res) => {
       .returning();
     res.status(201).json(created);
   } catch (err) {
-    if (pgErrorCode(err) === PG_FOREIGN_KEY_VIOLATION) {
-      throw new HttpError(404, "Company not found");
-    }
+    if (pgErrorCode(err) === PG_FOREIGN_KEY_VIOLATION) throw new HttpError(404, "Company not found");
     throw err;
   }
 });
 
 contactsRouter.patch("/contacts/:id", async (req, res) => {
+  const user = currentUser(req);
   const id = requireId(req.params.id);
   const data = contactInput.partial().parse(req.body);
 
   const [updated] = await db
     .update(contacts)
     .set({ ...data, updatedAt: new Date() })
-    .where(eq(contacts.id, id))
+    .where(and(eq(contacts.id, id), inArray(contacts.companyId, ownedCompanyIds(user.id))))
     .returning();
 
   if (!updated) throw new HttpError(404, "Contact not found");
@@ -68,11 +72,12 @@ contactsRouter.patch("/contacts/:id", async (req, res) => {
 });
 
 contactsRouter.delete("/contacts/:id", async (req, res) => {
+  const user = currentUser(req);
   const id = requireId(req.params.id);
 
   const [deleted] = await db
     .delete(contacts)
-    .where(eq(contacts.id, id))
+    .where(and(eq(contacts.id, id), inArray(contacts.companyId, ownedCompanyIds(user.id))))
     .returning({ id: contacts.id });
 
   if (!deleted) throw new HttpError(404, "Contact not found");
