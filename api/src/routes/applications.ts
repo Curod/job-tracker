@@ -8,22 +8,23 @@ import { applicationStatus, applications, companies } from "../db/schema.js";
 import { canTransition } from "../domain/status.js";
 import { HttpError } from "../errors.js";
 import { pgErrorCode, PG_FOREIGN_KEY_VIOLATION, requireId } from "../http.js";
+import { httpUrl, idSchema, idStringSchema } from "../validation.js";
 
 const COMPANY_NOT_FOUND = "companyId does not refer to an existing company";
 
 const statusSchema = z.enum(applicationStatus.enumValues);
 
 const applicationInput = z.object({
-  companyId: z.number().int().positive(),
+  companyId: idSchema,
   roleTitle: z.string().trim().min(1).max(200),
-  jobUrl: z.url().max(1000).nullish(),
+  jobUrl: httpUrl.max(1000).nullish(),
   appliedAt: z.iso.date().nullish(),
   cvVersion: z.string().trim().max(100).nullish(),
 });
 
 const listQuery = z.object({
   status: statusSchema.optional(),
-  companyId: z.coerce.number().int().positive().optional(),
+  companyId: idStringSchema.optional(),
 });
 
 const statusInput = z.object({ status: statusSchema });
@@ -122,7 +123,13 @@ applicationsRouter.patch("/:id/status", async (req, res) => {
   const [updated] = await db
     .update(applications)
     .set({ status: to, updatedAt: new Date() })
-    .where(and(eq(applications.id, id), eq(applications.status, current.status)))
+    .where(
+      and(
+        eq(applications.id, id),
+        eq(applications.status, current.status),
+        inArray(applications.companyId, ownedCompanyIds(user.id)),
+      ),
+    )
     .returning();
 
   if (!updated) {

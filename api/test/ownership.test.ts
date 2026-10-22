@@ -79,4 +79,44 @@ describe("data ownership", () => {
     expect((await bob.get(`/companies/${aliceCompanyId}/contacts`)).status).toBe(404);
     expect((await bob.get(`/applications/${aliceApplicationId}/notes`)).status).toBe(404);
   });
+
+  it("cannot update another user's application or move one to their company", async () => {
+    const bobCompany = await bob.post("/companies").send({ name: "Wix" });
+    const bobApplication = await bob
+      .post("/applications")
+      .send({ companyId: bobCompany.body.id, roleTitle: "Frontend Developer" });
+
+    const patchAlices = await bob
+      .patch(`/applications/${aliceApplicationId}`)
+      .send({ roleTitle: "Hacked" });
+    const moveToAlice = await bob
+      .patch(`/applications/${bobApplication.body.id}`)
+      .send({ companyId: aliceCompanyId });
+
+    expect(patchAlices.status).toBe(404);
+    expect(moveToAlice.status).toBe(400);
+  });
+
+  it("cannot change or delete another user's company, contacts or notes", async () => {
+    const contact = await alice
+      .post(`/companies/${aliceCompanyId}/contacts`)
+      .send({ name: "Dana Levi" });
+    const note = await alice
+      .post(`/applications/${aliceApplicationId}/notes`)
+      .send({ body: "Phone screen" });
+
+    expect((await bob.patch(`/contacts/${contact.body.id}`).send({ name: "Hacked" })).status).toBe(404);
+    expect((await bob.delete(`/contacts/${contact.body.id}`)).status).toBe(404);
+    expect((await bob.delete(`/notes/${note.body.id}`)).status).toBe(404);
+    expect((await bob.delete(`/companies/${aliceCompanyId}`)).status).toBe(404);
+
+    expect((await alice.get(`/companies/${aliceCompanyId}/contacts`)).body).toHaveLength(1);
+    expect((await alice.get(`/applications/${aliceApplicationId}/notes`)).body).toHaveLength(1);
+  });
+
+  it("cannot filter applications by another user's company", async () => {
+    const res = await bob.get(`/applications?companyId=${aliceCompanyId}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
 });

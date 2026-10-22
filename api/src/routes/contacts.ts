@@ -7,12 +7,13 @@ import { db } from "../db/client.js";
 import { contacts } from "../db/schema.js";
 import { HttpError } from "../errors.js";
 import { pgErrorCode, PG_FOREIGN_KEY_VIOLATION, requireId } from "../http.js";
+import { httpUrl } from "../validation.js";
 
 const contactInput = z.object({
   name: z.string().trim().min(1).max(200),
   role: z.string().trim().max(200).nullish(),
   email: z.email().max(320).nullish(),
-  linkedinUrl: z.url().max(500).nullish(),
+  linkedinUrl: httpUrl.max(500).nullish(),
   notes: z.string().max(5000).nullish(),
 });
 

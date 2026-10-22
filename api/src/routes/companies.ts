@@ -6,10 +6,11 @@ import { db } from "../db/client.js";
 import { companies } from "../db/schema.js";
 import { HttpError } from "../errors.js";
 import { pgErrorCode, PG_FOREIGN_KEY_VIOLATION, PG_RESTRICT_VIOLATION, requireId } from "../http.js";
+import { httpUrl } from "../validation.js";
 
 const companyInput = z.object({
   name: z.string().trim().min(1).max(200),
-  website: z.url().max(500).nullish(),
+  website: httpUrl.max(500).nullish(),
   notes: z.string().max(5000).nullish(),
 });
 

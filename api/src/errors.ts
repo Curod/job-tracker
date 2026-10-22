@@ -22,12 +22,25 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   }
 
   if (err instanceof z.ZodError) {
-    res.status(400).json({ error: "Validation failed", issues: err.issues });
+    res.status(400).json({
+      error: "Validation failed",
+      issues: err.issues.map((issue) => ({
+        path: issue.path.map(String).join("."),
+        message: issue.message,
+      })),
+    });
     return;
   }
 
-  if ((err as { type?: string })?.type === "entity.parse.failed") {
+  const bodyError = err as { type?: string; status?: number; expose?: boolean; message?: string };
+
+  if (bodyError?.type === "entity.parse.failed") {
     res.status(400).json({ error: "Malformed JSON body" });
+    return;
+  }
+
+  if (bodyError?.expose && typeof bodyError.status === "number" && bodyError.status < 500) {
+    res.status(bodyError.status).json({ error: bodyError.message });
     return;
   }
 

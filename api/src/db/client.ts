@@ -9,4 +9,4 @@ if (!connectionString) {
 
 export const pool = new pg.Pool({ connectionString });
 
-  export const db = drizzle({ client: pool });
+export const db = drizzle({ client: pool });

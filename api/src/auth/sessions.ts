@@ -11,7 +11,7 @@ export function sessionCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.COOKIE_SECURE !== "false",
     path: "/",
   };
 }

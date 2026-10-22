@@ -4,7 +4,7 @@ process.loadEnvFile("../.env");
 
 export default defineConfig({
   test: {
-    env: { DATABASE_URL: process.env.TEST_DATABASE_URL! },
+        env: { DATABASE_URL: process.env.TEST_DATABASE_URL!, COOKIE_SECURE: "false" },
     globalSetup: "./test/global-setup.ts",
     fileParallelism: false,
   },

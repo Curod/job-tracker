@@ -122,4 +122,17 @@ describe("sessions", () => {
     const { rows } = await pool.query("SELECT count(*)::int AS count FROM sessions");
     expect(rows[0].count).toBe(0);
   });
+
+  it("rejects an expired session", async () => {
+    const agent = request.agent(app);
+    await agent.post("/auth/signup").send(credentials);
+    await pool.query("UPDATE sessions SET expires_at = now() - interval '1 minute'");
+
+    expect((await agent.get("/auth/me")).status).toBe(401);
+  });
+
+  it("rejects a forged session cookie", async () => {
+    const res = await request(app).get("/auth/me").set("Cookie", "session=forged-token");
+    expect(res.status).toBe(401);
+  });
 });

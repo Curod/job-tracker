@@ -1,13 +1,15 @@
 import { HttpError } from "./errors.js";
+import { ID_PATTERN, MAX_DB_ID } from "./validation.js";
 
-// pg codes
+// pg codrs
 export const PG_FOREIGN_KEY_VIOLATION = "23503";
 export const PG_RESTRICT_VIOLATION = "23001";
 export const PG_UNIQUE_VIOLATION = "23505";
 
 export function parseId(value: string): number | null {
+  if (!ID_PATTERN.test(value)) return null;
   const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
+  return id <= MAX_DB_ID ? id : null;
 }
 
 export function requireId(value: string): number {
